@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>POS System with QR Code Payment</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-100 text-gray-800">
+
+    <!-- Header -->
+    <header class="bg-blue-600 text-white text-center py-4">
+        <h1 class="text-3xl font-bold">POS System with QR Code Payment</h1>
+    </header>
+
+    <!-- Main Content -->
+    <div class="container mx-auto px-4 py-6">
+        <!-- Products Section -->
+        <section>
+            <h2 class="text-2xl font-semibold mb-4">Products</h2>
+            <ul id="product-list" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <!-- Products will be dynamically loaded here -->
+            </ul>
+        </section>
+
+        <!-- Cart Section -->
+        <section class="mt-8">
+            <h2 class="text-2xl font-semibold mb-4">Your Cart</h2>
+            <div id="cart" class="bg-white p-4 rounded-lg shadow-md">
+                <!-- Ensure the empty message exists here -->
+                <p class="text-gray-500" id="empty-cart-message">No items in the cart</p>
+            </div>
+        </section>
+
+        <!-- Checkout Section -->
+        <section class="mt-8">
+            <button onclick="checkout()" 
+                class="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded shadow">
+                Checkout
+            </button>
+
+            <div id="total" class="text-xl font-semibold mt-4"></div>
+        </section>
+
+        <!-- QR Code Section -->
+        <section class="mt-8">
+            <h2 class="text-2xl font-semibold mb-4">Scan to Pay</h2>
+            <div class="flex justify-center items-center">
+                <img id="qrCode" alt="QR Code" class="w-48 h-48 hidden">
+            </div>
+        </section>
+    </div>
+
+    <!-- JavaScript -->
+    <script>
+        let cart = [];
+
+        // Load products from backend
+        async function loadProducts() {
+            const response = await fetch("http://192.168.0.107:5000/products");
+            const data = await response.json();
+            const productList = document.getElementById("product-list");
+
+            for (const [key, product] of Object.entries(data.products)) {
+                const productCard = document.createElement("li");
+                productCard.className = "bg-white p-4 rounded-lg shadow hover:shadow-lg";
+                productCard.innerHTML = `
+                    <h3 class="text-lg font-bold mb-2">${product.name}</h3>
+                    <p class="text-gray-700 mb-2">$${product.price.toFixed(2)}</p>
+                    <button onclick="addToCart('${product.name}', ${product.price})" 
+                        class="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-2 rounded">
+                        Add to Cart
+                    </button>
+                `;
+                productList.appendChild(productCard);
+            }
+        }
+
+        // Add product to cart
+        function addToCart(name, price) {
+            cart.push({ name, price, quantity: 1 });
+            updateCart();
+        }
+
+        // Update cart UI
+        function updateCart() {
+            const cartDiv = document.getElementById("cart");
+            const emptyMessage = document.getElementById("empty-cart-message");
+
+            cartDiv.innerHTML = ""; // Clear cart content
+
+            // Check if empty message exists and display based on cart status
+            if (emptyMessage) {
+                if (cart.length === 0) {
+                    emptyMessage.style.display = "block";
+                    return;
+                } else {
+                    emptyMessage.style.display = "none";
+                }
+            }
+
+            // Render cart items
+            cart.forEach((item, index) => {
+                const cartItem = document.createElement("div");
+                cartItem.className = "flex justify-between items-center mb-2";
+                cartItem.innerHTML = `
+                    <span>${item.name} - $${item.price.toFixed(2)} x ${item.quantity}</span>
+                    <button onclick="removeFromCart(${index})" 
+                        class="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-2 rounded">
+                        Remove
+                    </button>
+                `;
+                cartDiv.appendChild(cartItem);
+            });
+        }
+
+        // Remove item from cart
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            updateCart();
+        }
+
+        // Checkout process
+        async function checkout() {
+            try {
+                const response = await fetch("http://192.168.0.107:5000/checkout", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ items: cart })
+                });
+
+                if (!response.ok) throw new Error("Checkout failed");
+
+                const data = await response.json();
+                document.getElementById("total").innerText = `Total: $${data.total_price.toFixed(2)}`;
+                await generateQR(data.payment_link);
+            } catch (error) {
+                console.error("Checkout Error:", error);
+                alert("Failed to checkout!");
+            }
+        }
+
+        // Generate QR Code for payment
+        async function generateQR(paymentLink) {
+            const qrResponse = await fetch("http://192.168.0.107:5000/generate_qr", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ payment_link: paymentLink })
+            });
+
+            if (!qrResponse.ok) throw new Error("Failed to generate QR Code");
+
+            const qrBlob = await qrResponse.blob();
+            const qrUrl = URL.createObjectURL(qrBlob);
+            const qrImage = document.getElementById("qrCode");
+            qrImage.src = qrUrl;
+            qrImage.style.display = "block";
+        }
+
+        // Load products when the page loads
+        loadProducts();
+    </script>
+
+</body>
+</html>
